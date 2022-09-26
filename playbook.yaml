@@ -1,0 +1,90 @@
+- name: Setup Flink Cluster machines
+  hosts: all
+  tasks:
+    - name: Enable universe
+      apt_repository:
+        repo: deb-src http://archive.canonical.com/ubuntu focal universe
+        state: present
+      become: yes
+    - name: Install JDK 8 and unzip
+      ansible.builtin.apt:
+        pkg:
+        - openjdk-8-jdk-headless
+        - unzip
+      become: yes
+    - name: Download Flink
+      ansible.builtin.get_url:
+        url: https://dlcdn.apache.org/flink/flink-1.15.2/flink-1.15.2-bin-scala_2.12.tgz
+        dest: /home/ubuntu/flink.tgz
+        timeout: 120
+        checksum: sha512:ad3eeb0470855d4cdb4f5c5f913845360979815b2c1771526991801db2f15ed49fec5cf8166a598e8c3e03c8dd24afb003c96877362c95e9bfba0bfd987cd849
+    - name: Extract flink.tgz
+      ansible.builtin.unarchive:
+        src: /home/ubuntu/flink.tgz
+        dest: /home/ubuntu/
+        remote_src: yes
+    - name: Symlink to extracted flink directory
+      ansible.builtin.file:
+        src: /home/ubuntu/flink-1.15.2
+        dest: /home/ubuntu/flink
+        state: link
+    - name: Extract nexmark-flink.tgz
+      ansible.builtin.unarchive:
+        src: nexmark-flink.tgz
+        dest: /home/ubuntu/
+    - name: Symlink extracted nexmark directory
+      ansible.builtin.file:
+        src: /home/ubuntu/nexmark-flink
+        dest: /home/ubuntu/nexmark
+        state: link
+    - name: Copy Nexmark source generator jar
+      ansible.builtin.copy:
+        src: /home/ubuntu/nexmark/lib/nexmark-flink-0.2-SNAPSHOT.jar
+        dest: /home/ubuntu/flink/lib/
+        remote_src: yes
+    - name: Set flink/conf/workers
+      ansible.builtin.template:
+        src: templates/flink_conf_workers.j2
+        dest: /home/ubuntu/flink/conf/workers
+    - name: Copy sql-client-defaults.yaml
+      ansible.builtin.copy:
+        src: /home/ubuntu/nexmark/conf/sql-client-defaults.yaml
+        dest: /home/ubuntu/flink/conf/
+        remote_src: yes
+    - name: Set flink-conf.yaml
+      ansible.builtin.template:
+        src: templates/flink-conf.yaml
+        dest: /home/ubuntu/flink/conf/flink-conf.yaml
+    - name: Set nexmark.yaml
+      ansible.builtin.template:
+        src: templates/nexmark.yaml
+        dest: /home/ubuntu/nexmark/conf/nexmark.yaml
+    - name: Ensure NEXMARK_HOME environment variable always set.
+      ansible.builtin.lineinfile:
+        path: /home/ubuntu/.profile
+        regexp: '^export NEXMARK_HOME='
+        line: export NEXMARK_HOME="/home/ubuntu/nexmark"
+    - name: Ensure FLINK_HOME environment variable always set.
+      ansible.builtin.lineinfile:
+        path: /home/ubuntu/.profile
+        regexp: '^export FLINK_HOME='
+        line: export FLINK_HOME="/home/ubuntu/flink"
+- name: Setup Flink leader ssh access to workers
+  hosts: leader
+  tasks:
+    - name: Generate an OpenSSH keypair for the leader
+      community.crypto.openssh_keypair:
+        path: /home/ubuntu/.ssh/id_rsa
+    - name: Copy the public key to the host ready for the workers
+      ansible.builtin.fetch:
+        src: /home/ubuntu/.ssh/id_rsa.pub
+        dest: /tmp/id_ssh_rsa_leader.pub
+        flat: yes
+- name: Setup Flink workers to allow ssh access from leader
+  hosts: workers
+  tasks:
+    - name: Set authorized key taken from leader
+      ansible.posix.authorized_key:
+        user: ubuntu
+        state: present
+        key: "{{ lookup('file', '/tmp/id_ssh_rsa_leader.pub') }}"
