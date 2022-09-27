@@ -11,6 +11,7 @@
         pkg:
         - openjdk-8-jdk-headless
         - unzip
+        - byobu
       become: yes
     - name: Download Flink
       ansible.builtin.get_url:

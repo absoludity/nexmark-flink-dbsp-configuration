@@ -21,7 +21,7 @@
 #==============================================================================
 
 # The metric reporter server host.
-nexmark.metric.reporter.host: {{ groups['leader'][0] }}
+nexmark.metric.reporter.host: {{ hostvars['leader']['ansible_default_ipv4']['address'] }}
 # The metric reporter server port.
 nexmark.metric.reporter.port: 9098
 

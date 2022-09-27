@@ -16,11 +16,11 @@
 # limitations under the License.
 ################################################################################
 #execution.target: yarn-per-job
-taskmanager.memory.process.size: 8G
-jobmanager.rpc.address: {{ groups['leader'][0] }}
+taskmanager.memory.process.size: 16G
+jobmanager.rpc.address: {{ hostvars['leader']['ansible_default_ipv4']['address'] }}
 jobmanager.rpc.port: 6123
-jobmanager.memory.process.size: 8G
-taskmanager.numberOfTaskSlots: 1
+jobmanager.memory.process.size: 16G
+taskmanager.numberOfTaskSlots: 4
 parallelism.default: 8
 io.tmp.dirs: /tmp
 #==============================================================================
