@@ -1,8 +1,8 @@
-# Automated setup for running Nexmark Flink benchmarks
+# Automated setup for running Nexmark Flink and DBSP benchmarks
 
-(and comparing the Nexmark/Flink benchmarks with the Database Stream Processor Nexmark benchmarks)
+The [Flink playbook](./playbook_flink.yaml) is based on the cluster setup instructions found in the [Nexmark Flink repository](https://github.com/nexmark/nexmark#setup-cluster).
 
-The [playbook](./playbook.yaml) is based on the cluster setup instructions found in the [Nexmark Flink repository](https://github.com/nexmark/nexmark#setup-cluster).
+The [DBSP playbook](./playbook_dbsp.yaml) simply allows running the Nexmark queries with DBSP on a similar machine to be able to compare the Flink vs DBSP Nexmark benchmark on the same spec'd machine.
 
 ## Install Ansible and dependencies
 
@@ -13,20 +13,20 @@ sudo apt install -y ansible
 ansible-galaxy collection install community.crypto ansible.posix
 ```
 
-## Configuring Ansible with your Flink machines
+## Configuring Ansible with your benchmark machines
 
-Copy the inventory template:
+Copy the relevant inventory template, for example, for flink:
 
 ```shell
-cp inventory_temeplate.ini inventory.ini
+cp inventory_flink_temeplate.ini inventory_flink.ini
 ```
 
 and edit the IP addresses to match the machines you have ready for the roles of your Flink leader and workers, ensuring the `ansible_user` is also correctly set (and potentially the `ansible_ssh_private_key` attribute for ec2 - see appendix below).
 
-Once set, you can run the following to ensure ansible can connect to your machines:
+Once set, you can run the following to ensure ansible can connect to the machines listed in the inventory:
 
 ```shell
-$ ansible -i inventory.ini all -m ping
+$ ansible -i inventory_flink.ini all -m ping
 10.147.199.20 | SUCCESS => {
     "ansible_facts": {
         "discovered_interpreter_python": "/usr/bin/python3"
@@ -52,30 +52,199 @@ $ ansible -i inventory.ini all -m ping
 
 If you see "authenticity of host can't be established" errors, first let `ssh` know that you trust the host by ssh-ing to that IP address and trusting the host.
 
-## Running the playbook to setup the Nexmark-Flink cluster
+## Nexmark Flink benchmark
+
+### Running the playbook to setup the Nexmark-Flink cluster
 
 Note: This playbook assumes your machines are Ubuntu 20.04 instances.
 
 ```shell
-ansible-playbook -i inventory.ini playbook.yaml
+ansible-playbook -i inventory_flink.ini playbook_flink.yaml
 ```
 
-## Running the benchmark
+### Running the benchmark
 
 Once the Nexmark-Flink cluster is configured, we can `ssh` to the leader and start the cluster (not automated yet, as requires accepting host authenticity of workers on leader):
 
 ```shell
-ssh ubuntu@10.147.199.70
+ssh -i ~/.ssh/nexmark-bench.pem ubuntu@x.x.x.x
 ./flink/bin/start-cluster.sh && ./nexmark/bin/setup_cluster.sh
 ```
 
 and run queries with:
 
 ```shell
-./nexmark/bin/run-query.sh q1
+./nexmark/bin/run_query.sh q1
 ```
 
 To run the full set of queries on a remote machine, it is best to use screen or byobu to ensure that if the connection is interrupted you can reconnect.
+
+### Nexmark Flink Result
+
+The Nexmark Flink benchmark results below are from running with 8 workers using the `m5ad.4xlarge` instance type (64Gb, 16vCPU, 2x300 SSD) configured with more memory than the original test (leading to slightly better performance).
+
+```shell
++-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
+| Nexmark Query     | Events Num        | Cores             | Time(s)           | Cores * Time(s)   | Throughput/Cores  |
++-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
+|q0                 |100,000,000        |7.08               |70.668             |500.611            |199.75 K/s         |
+|q1                 |100,000,000        |2.21               |212.681            |470.793            |212.41 K/s         |
+|q2                 |100,000,000        |3.79               |115.704            |437.987            |228.32 K/s         |
+|q3                 |100,000,000        |5.48               |122.024            |668.909            |149.5 K/s          |
+|q4                 |100,000,000        |13.21              |342.449            |4524.896           |22.1 K/s           |
+|q5                 |100,000,000        |10.83              |509.696            |5521.974           |18.11 K/s          |
+|q7                 |100,000,000        |13.38              |705.598            |9440.273           |10.59 K/s          |
+|q8                 |100,000,000        |3.99               |204.295            |814.796            |122.73 K/s         |
+|q9                 |100,000,000        |11.41              |764.327            |8721.988           |11.46 K/s          |
+|q10                |100,000,000        |4.95               |300.152            |1485.508           |67.32 K/s          |
+|q11                |100,000,000        |10.06              |302.461            |3042.496           |32.87 K/s          |
+|q12                |100,000,000        |5.66               |275.785            |1562.132           |64.02 K/s          |
+|q13                |100,000,000        |6.55               |121.440            |795.260            |125.75 K/s         |
+|q14                |100,000,000        |5.58               |113.870            |635.684            |157.31 K/s         |
+|q15                |100,000,000        |1.76               |1108.881           |1949.250           |51.3 K/s           |
+|q16                |100,000,000        |8.09               |492.789            |3985.733           |25.09 K/s          |
+|q17                |100,000,000        |9.16               |174.633            |1600.346           |62.49 K/s          |
+|q18                |100,000,000        |10.46              |302.273            |3162.283           |31.62 K/s          |
+|q19                |100,000,000        |14.12              |201.026            |2837.987           |35.24 K/s          |
+|q20                |100,000,000        |15.3               |445.185            |6809.967           |14.68 K/s          |
+|q21                |100,000,000        |5.99               |173.613            |1040.571           |96.1 K/s           |
+|q22                |100,000,000        |5.84               |140.740            |821.984            |121.66 K/s         |
+|Total              |2,200,000,000      |174.915            |7200.290           |60831.429          |1.86 M/s           |
++-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
+```
+
+Although the `Cores` and `Time(s)` columns appear different from the [original Nexmark results](https://github.com/nexmark/nexmark#benchmark-results), the `Cores * Time(s)` and `Throughput/Cores` columns match much more closely. I am not certain, but the reason appears to be that often a query is finished (CPU drops to near zero) but the Flink job does not finish for a substantial time afterwards.
+
+For example, the `q0` query is slightly faster than the original result, and the end of the query is recognised just as the CPU usage drops:
+
+```shell
+Start to run query q0 with workload [tps=10 M, eventsNum=100 M, percentage=bid:46,auction:3,person:1,kafkaServers:null]
+Start the warmup for at most 120000ms and 100000000 events.
+Stop the warmup, cost 120100ms.
+Monitor metrics after 10 seconds.
+Start to monitor metrics until job is finished.
+Current Cores=8.12 (8 TMs)
+Current Cores=8.16 (8 TMs)
+Current Cores=8.09 (8 TMs)
+Current Cores=8.15 (8 TMs)
+Current Cores=8.08 (8 TMs)
+Current Cores=8.17 (8 TMs)
+Current Cores=8.07 (8 TMs)
+Current Cores=8.14 (8 TMs)
+Current Cores=8.07 (8 TMs)
+Current Cores=8.07 (8 TMs)
+Current Cores=3.78 (8 TMs)
+Current Cores=0.1 (8 TMs)
+Summary Average: EventsNum=100,000,000, Cores=7.08, Time=70.668 s
+Stop job query q0
+```
+
+whereas the `q1` query result is reported as 212s compared to the original Nexmark 76s, yet checking the output, you can see that the CPU usage drops to zero at around one third of the test output, implying either that the query had finished at around 70s, (or there was some tiny remainder that was played out very slowly?). But none-the-less, the `Cores * Time (s)` and `Throughput/Core` columns match the original results (with a slight improvement, just like the `q0` result).
+
+```shell
+Start to run query q1 with workload [tps=10 M, eventsNum=100 M, percentage=bid:46,auction:3,person:1,kafkaServers:null]
+Start the warmup for at most 120000ms and 100000000 events.
+Stop the warmup, cost 120100ms.
+Monitor metrics after 10 seconds.
+Start to monitor metrics until job is finished.
+Current Cores=8.1 (8 TMs)
+Current Cores=8.14 (8 TMs)
+Current Cores=8.09 (8 TMs)
+Current Cores=8.14 (8 TMs)
+Current Cores=8.08 (8 TMs)
+Current Cores=8.13 (8 TMs)
+Current Cores=8.08 (8 TMs)
+Current Cores=8.09 (8 TMs)
+Current Cores=8.07 (8 TMs)
+Current Cores=8.09 (8 TMs)
+Current Cores=6.4 (8 TMs)
+Current Cores=1.15 (8 TMs)
+Current Cores=0.05 (8 TMs)
+Current Cores=0.17 (8 TMs)
+Current Cores=0.16 (8 TMs)
+Current Cores=0.28 (8 TMs)
+Current Cores=0.04 (8 TMs)
+Current Cores=0.06 (8 TMs)
+Current Cores=0.04 (8 TMs)
+Current Cores=0.08 (8 TMs)
+Current Cores=0.05 (8 TMs)
+Current Cores=0.07 (8 TMs)
+Current Cores=0.05 (8 TMs)
+Current Cores=0.07 (8 TMs)
+Current Cores=0.04 (8 TMs)
+Current Cores=0.07 (8 TMs)
+Current Cores=0.06 (8 TMs)
+Current Cores=0.08 (8 TMs)
+Current Cores=0.04 (8 TMs)
+Current Cores=0.07 (8 TMs)
+Current Cores=0.04 (8 TMs)
+Current Cores=0.07 (8 TMs)
+Current Cores=0.05 (8 TMs)
+Current Cores=0.11 (8 TMs)
+Current Cores=0.07 (8 TMs)
+Current Cores=0.09 (8 TMs)
+Current Cores=0.04 (8 TMs)
+Current Cores=0.08 (8 TMs)
+Current Cores=0.04 (8 TMs)
+Current Cores=0.06 (8 TMs)
+Current Cores=0.04 (8 TMs)
+Summary Average: EventsNum=100,000,000, Cores=2.21, Time=212.681 s
+Stop job query q1
+```
+
+See the [complete output for all queries](logs/nexmark-flink-full-output.txt) to compare other queries.
+
+## DBSP Nexmark Benchmark
+
+## Running the playbook to setup the DBSP machine
+
+Note: This playbook assumes your machines are Ubuntu 20.04 instances.
+
+```shell
+ansible-playbook -i inventory_dbsp.ini playbook_dbsp.yaml
+```
+
+## Running the benchmark
+
+Once the machine is configured, we can build and run the benchmark by ssh'ing into the machine and running:
+
+```shell
+./dbsp-bench.sh
+```
+
+## DBSP Result
+
+The Nexmark DBSP benchmark results below are from running the queries on a single worker `m5ad.4xlarge` instance type (64Gb, 16vCPU, 2x300 SSD), configured with 8 workers (passed to [`Runtime::init_circuit()`](https://github.com/vmware/database-stream-processor/blob/dc1f6420cce5fd7de56e99a3655015ef55c80753/src/circuit/dbsp_handle.rs#L9-L30)) to be similar in parallelism to the Nexmark Flink tests.
+
+```shell
+┌───────┬─────────────┬───────┬──────────┬─────────────────┬──────────────────┬───────────────┬───────────────┬─────────────┬────────────┬────────────────┬─────────────┬─────────────┐
+│ Query │ #Events     │ Cores │ Elapsed  │ Cores * Elapsed │ Throughput/Cores │ Total Usr CPU │ Total Sys CPU │ Current RSS │ Peak RSS   │ Current Commit │ Peak Commit │ Page Faults │
+├───────┼─────────────┼───────┼──────────┼─────────────────┼──────────────────┼───────────────┼───────────────┼─────────────┼────────────┼────────────────┼─────────────┼─────────────┤
+│ q0    │ 100,000,000 │ 8     │ 21.812s  │ 174.494s        │ 573.087 K/s      │ 225.377s      │ 2.231s        │ 464.79 MiB  │ 169.29 MiB │ 464.79 MiB     │ 464.82 MiB  │ 0           │
+│ q1    │ 100,000,000 │ 8     │ 21.999s  │ 175.989s        │ 568.218 K/s      │ 250.729s      │ 2.078s        │ 4.65 MiB    │ 238.05 MiB │ 4.65 MiB       │ 4.68 MiB    │ 0           │
+│ q2    │ 100,000,000 │ 8     │ 21.900s  │ 175.200s        │ 570.775 K/s      │ 229.380s      │ 1.917s        │ 5.53 MiB    │ 255.69 MiB │ 5.53 MiB       │ 5.57 MiB    │ 0           │
+│ q3    │ 100,000,000 │ 8     │ 21.557s  │ 172.455s        │ 579.860 K/s      │ 233.683s      │ 2.693s        │ 264.09 MiB  │ 508.00 MiB │ 264.09 MiB     │ 264.12 MiB  │ 1           │
+│ q4    │ 100,000,000 │ 8     │ 27.180s  │ 217.443s        │ 459.891 K/s      │ 301.086s      │ 9.212s        │ 4.51 GiB    │ 7.72 GiB   │ 4.51 GiB       │ 7.33 GiB    │ 0           │
+│ q5    │ 100,000,000 │ 8     │ 21.848s  │ 174.783s        │ 572.136 K/s      │ 234.388s      │ 3.990s        │ 1.16 MiB    │ 7.72 GiB   │ 1.16 MiB       │ 1.19 MiB    │ 0           │
+│ q6    │ 100,000,000 │ 8     │ 27.666s  │ 221.332s        │ 451.810 K/s      │ 315.526s      │ 7.183s        │ 1.01 GiB    │ 8.71 GiB   │ 1.01 GiB       │ 3.83 GiB    │ 0           │
+│ q7    │ 100,000,000 │ 8     │ 39.318s  │ 314.543s        │ 317.922 K/s      │ 280.992s      │ 9.446s        │ 3.50 GiB    │ 12.74 GiB  │ 3.50 GiB       │ 6.94 GiB    │ 0           │
+│ q8    │ 100,000,000 │ 8     │ 22.452s  │ 179.612s        │ 556.755 K/s      │ 237.667s      │ 3.432s        │ 4.59 MiB    │ 12.74 GiB  │ 4.59 MiB       │ 4.67 MiB    │ 0           │
+│ q9    │ 100,000,000 │ 8     │ 118.166s │ 945.325s        │ 105.784 K/s      │ 575.137s      │ 18.756s       │ 6.26 GiB    │ 22.00 GiB  │ 6.26 GiB       │ 12.66 GiB   │ 0           │
+│ q12   │ 100,000,000 │ 8     │ 23.843s  │ 190.748s        │ 524.253 K/s      │ 254.199s      │ 2.574s        │ 7.54 MiB    │ 22.00 GiB  │ 7.54 MiB       │ 7.61 MiB    │ 0           │
+│ q13   │ 100,000,000 │ 8     │ 42.980s  │ 343.839s        │ 290.834 K/s      │ 369.807s      │ 8.485s        │ 3.97 MiB    │ 22.00 GiB  │ 3.97 MiB       │ 5.33 GiB    │ 0           │
+│ q14   │ 100,000,000 │ 8     │ 21.432s  │ 171.453s        │ 583.252 K/s      │ 243.556s      │ 1.723s        │ 992.00 KiB  │ 22.00 GiB  │ 992.00 KiB     │ 1.00 MiB    │ 0           │
+│ q15   │ 100,000,000 │ 8     │ 31.684s  │ 253.472s        │ 394.522 K/s      │ 314.417s      │ 13.755s       │ 6.65 MiB    │ 22.00 GiB  │ 6.65 MiB       │ 6.72 MiB    │ 0           │
+│ q16   │ 100,000,000 │ 8     │ 91.241s  │ 729.925s        │ 137.000 K/s      │ 740.327s      │ 11.651s       │ 6.72 MiB    │ 22.00 GiB  │ 6.72 MiB       │ 6.79 MiB    │ 0           │
+│ q17   │ 100,000,000 │ 8     │ 39.603s  │ 316.822s        │ 315.635 K/s      │ 430.137s      │ 9.622s        │ 2.25 GiB    │ 22.00 GiB  │ 2.25 GiB       │ 3.56 GiB    │ 0           │
+│ q18   │ 100,000,000 │ 8     │ 72.267s  │ 578.134s        │ 172.970 K/s      │ 433.556s      │ 12.617s       │ 16.00 EiB   │ 24.34 GiB  │ 16.00 EiB      │ 6.46 GiB    │ 0           │
+│ q19   │ 100,000,000 │ 8     │ 71.625s  │ 573.003s        │ 174.519 K/s      │ 533.640s      │ 25.065s       │ 16.00 EiB   │ 26.10 GiB  │ 16.00 EiB      │ 8.09 GiB    │ 0           │
+│ q20   │ 100,000,000 │ 8     │ 53.933s  │ 431.467s        │ 231.768 K/s      │ 403.149s      │ 13.237s       │ 16.00 EiB   │ 26.10 GiB  │ 16.00 EiB      │ 7.19 GiB    │ 0           │
+│ q21   │ 100,000,000 │ 8     │ 24.141s  │ 193.128s        │ 517.791 K/s      │ 253.392s      │ 2.063s        │ 16.00 EiB   │ 26.10 GiB  │ 16.00 EiB      │ 44.00 KiB   │ 0           │
+│ q22   │ 100,000,000 │ 8     │ 21.734s  │ 173.875s        │ 575.125 K/s      │ 252.337s      │ 2.015s        │ 16.00 EiB   │ 26.10 GiB  │ 16.00 EiB      │ 40.00 KiB   │ 0           │
+└───────┴─────────────┴───────┴──────────┴─────────────────┴──────────────────┴───────────────┴───────────────┴─────────────┴────────────┴────────────────┴─────────────┴─────────────┘
+```
+
+TODO: Add charts
 
 ## Appendix 1: Setting up ec2 instances for running benchmarks
 
@@ -91,20 +260,26 @@ aws ec2 create-key-pair \
 chmod 400 $HOME/.ssh/nexmark-bench.pem
 ```
 
-Then create three `m5ad.4xlarge` instances (64Gb, 16vCPU, 2x300 SSD) with an Ubuntu 20.04 LTS OS, with the keypair created above ready for ssh access. The default image has only 8Gb for the root partition, so update that to use the full 600Gb.
+Then create nine (8 workers, as per the nexmark conf) `m5ad.4xlarge` instances (64Gb, 16vCPU, 2x300 SSD) with an Ubuntu 20.04 LTS OS, with the keypair created above ready for ssh access. The default image has only 8Gb for the root partition, so update that to use the full 600Gb.
 
 ```shell
-aws ec2 run-instances --image-id ami-0c1704bac156af62c --count 4 --instance-type m5ad.4xlarge --key-name nexmark-bench --block-device-mappings '{"DeviceName": "/dev/sda1", "Ebs": { "VolumeSize": 600 } }'
+aws ec2 run-instances --image-id ami-0c1704bac156af62c --count 9 --instance-type m5ad.4xlarge --key-name nexmark-bench --block-device-mappings '{"DeviceName": "/dev/sda1", "Ebs": { "VolumeSize": 600 } }'
 ```
 
-Explicitly enable your computer (the ansible host) ssh access to the instances, as well as enabling your leader IP address ssh access:
+Ensure that your public IP address (the ansible host) is allowed to access port 22 of your servers. For example:
 
 ```shell
 aws ec2 authorize-security-group-ingress --group-id sg-0ef693a5bacbce0e1 --protocol tcp --port 22 --cidr x.x.x.x/32
-aws ec2 authorize-security-group-ingress --group-id sg-0ef693a5bacbce0e1 --protocol tcp --port 22 --cidr x.x.x.x/32
 ```
 
-Finally, describe the instances to get the IP addresses for the ansible hosts file, choosing one as the leader.
+You can verify this works by doing running `ssh-keyscan -H x.x.x.x` which should return the expected keys. Once verified, add the keys to your known hosts with:
+
+```shell
+for IP in $(aws ec2 describe-instances --query "Reservations[*].Instances[*].PublicIpAddress" --output text)
+do
+    ssh-keyscan -H $IP >> ~/.ssh/known_hosts
+done
+```
 
 Note that you'll need to specify the key when using ssh with:
 
@@ -153,320 +328,3 @@ do
 done
 multipass purge
 ```
-
-## DEBUGGING
-
-After identifying and working through a bunch of other issues, I'm able to run the nexmark tests partially, but even though I'm currently running with doubled `taskmanager.memory.process.size` and `jobmanager.memory.process.size` as well updated `numberOfTaskSlots` from 1 to 4 (see flink-conf.yaml). I still see the number of cores dropping at a particular point during *some* queries. For example, q0, q1, q2, q3 and q4 all drop from a high number of reported cores down to 0.02 during their runs. It appears that the earlier this drops, the slower the query will be (as you'd expect), but I've not yet found *why* this is happening:
-
-```shell
-$ ./nexmark/bin/run_query.sh
-Benchmark Queries: [q0, q1, q2, q3, q4, q5, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q17, q18, q19, q20, q21, q22]
-==================================================================
-Start to run query q0 with workload [tps=10 M, eventsNum=100 M, percentage=bid:46,auction:3,person:1,kafkaServers:null]
-Start the warmup for at most 120000ms and 100000000 events.
-Stop the warmup, cost 120100ms.
-Monitor metrics after 10 seconds.
-Start to monitor metrics until job is finished.
-Current Cores=8.05 (3 TMs)
-Current Cores=8.06 (3 TMs)
-Current Cores=8.05 (3 TMs)
-Current Cores=8.16 (3 TMs)
-Current Cores=8.02 (3 TMs)
-Current Cores=8.05 (3 TMs)
-Current Cores=8.02 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.04 (3 TMs)
-Current Cores=5.97 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.04 (3 TMs)
-Summary Average: EventsNum=100,000,000, Cores=5.41, Time=89.940 s
-Stop job query q0
-==================================================================
-Start to run query q1 with workload [tps=10 M, eventsNum=100 M, percentage=bid:46,auction:3,person:1,kafkaServers:null]
-Start the warmup for at most 120000ms and 100000000 events.
-Stop the warmup, cost 120100ms.
-Monitor metrics after 10 seconds.
-Start to monitor metrics until job is finished.
-Current Cores=8.03 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.05 (3 TMs)
-Current Cores=8.08 (3 TMs)
-Current Cores=8.04 (3 TMs)
-Current Cores=8.05 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.04 (3 TMs)
-Current Cores=7.49 (3 TMs)
-Current Cores=1.76 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.01 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Summary Average: EventsNum=100,000,000, Cores=2.2, Time=211.286 s
-Stop job query q1
-==================================================================
-Start to run query q2 with workload [tps=10 M, eventsNum=100 M, percentage=bid:46,auction:3,person:1,kafkaServers:null]
-Start the warmup for at most 120000ms and 100000000 events.
-Stop the warmup, cost 63800ms.
-Monitor metrics after 10 seconds.
-Start to monitor metrics until job is finished.
-Current Cores=8.03 (3 TMs)
-Current Cores=8.04 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.03 (3 TMs)
-Current Cores=8.02 (3 TMs)
-Current Cores=8.04 (3 TMs)
-Current Cores=8.02 (3 TMs)
-Current Cores=7.21 (3 TMs)
-Current Cores=0.41 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.01 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.01 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.01 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Summary Average: EventsNum=100,000,000, Cores=2.68, Time=159.545 s
-Stop job query q2
-==================================================================
-Start to run query q3 with workload [tps=10 M, eventsNum=100 M, percentage=bid:46,auction:3,person:1,kafkaServers:null]
-Start the warmup for at most 120000ms and 100000000 events.
-Stop the warmup, cost 120100ms.
-Monitor metrics after 10 seconds.
-Start to monitor metrics until job is finished.
-Current Cores=8.56 (3 TMs)
-Current Cores=8.58 (3 TMs)
-Current Cores=8.54 (3 TMs)
-Current Cores=8.55 (3 TMs)
-Current Cores=8.53 (3 TMs)
-Current Cores=8.53 (3 TMs)
-Current Cores=8.5 (3 TMs)
-Current Cores=8.52 (3 TMs)
-Current Cores=8.52 (3 TMs)
-Current Cores=8.54 (3 TMs)
-Current Cores=8.55 (3 TMs)
-Current Cores=8.55 (3 TMs)
-Current Cores=8.55 (3 TMs)
-Current Cores=8.54 (3 TMs)
-Current Cores=6.6 (3 TMs)
-Current Cores=1.92 (3 TMs)
-Current Cores=0.16 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Summary Average: EventsNum=100,000,000, Cores=4.76, Time=145.847 s
-Stop job query q3
-==================================================================
-Start to run query q4 with workload [tps=10 M, eventsNum=100 M, percentage=bid:46,auction:3,person:1,kafkaServers:null]
-Start the warmup for at most 120000ms and 100000000 events.
-Stop the warmup, cost 120100ms.
-Monitor metrics after 10 seconds.
-Start to monitor metrics until job is finished.
-Current Cores=19 (3 TMs)
-Current Cores=18.08 (3 TMs)
-Current Cores=15.87 (3 TMs)
-Current Cores=15.03 (3 TMs)
-Current Cores=15.86 (3 TMs)
-Current Cores=14.75 (3 TMs)
-Current Cores=14.49 (3 TMs)
-Current Cores=14.63 (3 TMs)
-Current Cores=15.01 (3 TMs)
-Current Cores=13.62 (3 TMs)
-Current Cores=13.86 (3 TMs)
-Current Cores=15.03 (3 TMs)
-Current Cores=15.76 (3 TMs)
-Current Cores=14.63 (3 TMs)
-Current Cores=13.47 (3 TMs)
-Current Cores=15.33 (3 TMs)
-Current Cores=14.18 (3 TMs)
-Current Cores=13.9 (3 TMs)
-Current Cores=13.6 (3 TMs)
-Current Cores=14.61 (3 TMs)
-Current Cores=13.42 (3 TMs)
-Current Cores=12.85 (3 TMs)
-Current Cores=13.43 (3 TMs)
-Current Cores=13.71 (3 TMs)
-Current Cores=12.83 (3 TMs)
-Current Cores=12.37 (3 TMs)
-Current Cores=12.64 (3 TMs)
-Current Cores=16.25 (3 TMs)
-Current Cores=14.05 (3 TMs)
-Current Cores=14.15 (3 TMs)
-Current Cores=13.25 (3 TMs)
-Current Cores=13.5 (3 TMs)
-Current Cores=13.25 (3 TMs)
-Current Cores=12.63 (3 TMs)
-Current Cores=13.34 (3 TMs)
-Current Cores=8.88 (3 TMs)
-Current Cores=7.35 (3 TMs)
-Current Cores=12.92 (3 TMs)
-Current Cores=13.45 (3 TMs)
-Current Cores=13.01 (3 TMs)
-Current Cores=12.9 (3 TMs)
-Current Cores=13.85 (3 TMs)
-Current Cores=12.47 (3 TMs)
-Current Cores=12.29 (3 TMs)
-Current Cores=12.35 (3 TMs)
-Current Cores=13.33 (3 TMs)
-Current Cores=15.36 (3 TMs)
-Current Cores=13.49 (3 TMs)
-Current Cores=13.92 (3 TMs)
-Current Cores=13.85 (3 TMs)
-Current Cores=13.68 (3 TMs)
-Current Cores=14.32 (3 TMs)
-Current Cores=12.31 (3 TMs)
-Current Cores=11.62 (3 TMs)
-Current Cores=12.99 (3 TMs)
-Current Cores=12.27 (3 TMs)
-Current Cores=13.23 (3 TMs)
-Current Cores=12.13 (3 TMs)
-Current Cores=11.71 (3 TMs)
-Current Cores=12.56 (3 TMs)
-Current Cores=12.48 (3 TMs)
-Current Cores=13.29 (3 TMs)
-Current Cores=12.53 (3 TMs)
-Current Cores=11.98 (3 TMs)
-Current Cores=12.65 (3 TMs)
-Current Cores=12.16 (3 TMs)
-Current Cores=15.85 (3 TMs)
-Current Cores=14.98 (3 TMs)
-Current Cores=14.16 (3 TMs)
-Current Cores=13.55 (3 TMs)
-Current Cores=12.95 (3 TMs)
-Current Cores=11.08 (3 TMs)
-Current Cores=5.73 (3 TMs)
-Current Cores=8.12 (3 TMs)
-Current Cores=8.91 (3 TMs)
-Current Cores=5.3 (3 TMs)
-Current Cores=0.89 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.03 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Current Cores=0.02 (3 TMs)
-Summary Average: EventsNum=100,000,000, Cores=9.4, Time=541.751 s
-Stop job query q4
-==================================================================
-
-```
-
-Only clues I can find in logs don't yet help me find what needs to change.
-
-This first one, a failed checkpoint, looks like a result of the issue (the task is no longer running):
-
-```shell
-2022-09-27 01:34:26,568 INFO  org.apache.flink.runtime.checkpoint.CheckpointFailureManager [] - Failed to trigger checkpoint for job 741279a6d3195b7d34a8e7dfc881b51f since Checkpoint triggering task Source: datagen[1] -> Calc[2] -> WatermarkAssigner[3] -> Calc[4] -> Sink: discard_sink[5] (4/8) of job 741279a6d3195b7d34a8e7dfc881b51f is not being executed at the moment. Aborting checkpoint. Failure reason: Not all required tasks are currently running..
-```
-
-Occasional metric failures don't seem relevant (but I don't know their cause either):
-
-```shell
-2022-09-27 02:13:54,678 WARN  com.github.nexmark.flink.metric.MetricReporter               [
-] - Job metric is not ready yet.
-java.lang.RuntimeException: Can't find TPS metric name from the response:
-[]
-        at com.github.nexmark.flink.metric.FlinkRestClient.getTpsMetricName(FlinkRestClient.
-java:165) ~[nexmark-flink-0.2-SNAPSHOT.jar:?]
-        at com.github.nexmark.flink.metric.MetricReporter.getJobInformation(MetricReporter.j
-ava:96) [nexmark-flink-0.2-SNAPSHOT.jar:?]
-        at com.github.nexmark.flink.metric.MetricReporter.submitMonitorThread(MetricReporter
-.java:70) [nexmark-flink-0.2-SNAPSHOT.jar:?]
-        at com.github.nexmark.flink.metric.MetricReporter.reportMetric(MetricReporter.java:1
-40) [nexmark-flink-0.2-SNAPSHOT.jar:?]
-        at com.github.nexmark.flink.QueryRunner.run(QueryRunner.java:85) [nexmark-flink-0.2-
-SNAPSHOT.jar:?]
-        at com.github.nexmark.flink.Benchmark.executeQueries(Benchmark.java:202) [nexmark-fl
-ink-0.2-SNAPSHOT.jar:?]
-        at com.github.nexmark.flink.Benchmark.runQueries(Benchmark.java:109) [nexmark-flink-
-0.2-SNAPSHOT.jar:?]
-        at com.github.nexmark.flink.Benchmark.main(Benchmark.java:81) [nexmark-flink-0.2-SNA
-PSHOT.jar:?]
-```
-
-The most relevant failure that I see occasionally is this unable to fulfil resource requirements:
-
-```shell
-2022-09-27 05:32:36,466 INFO  org.apache.flink.runtime.resourcemanager.slotmanager.DeclarativeSlotManager [] - Received resource requirements from job 045c630d3f4ef49bcdde0c0dc4a34781: [ResourceRequirement{resourceProfile=ResourceProfile{UNKNOWN}, numberOfRequiredSlots=4}]
-2022-09-27 05:32:36,467 WARN  org.apache.flink.runtime.resourcemanager.slotmanager.DeclarativeSlotManager [] - Could not fulfill resource requirements of job 045c630d3f4ef49bcdde0c0dc4a34781. Free slots: 0
-2022-09-27 05:32:36,467 WARN  org.apache.flink.runtime.jobmaster.slotpool.DeclarativeSlotPoolBridge [] - Could not acquire the minimum required resources, failing slot requests. Acquired: [ResourceRequirement{resourceProfile=ResourceProfile{cpuCores=1, taskHeapMemory=3.225gb (3462817321 bytes), taskOffHeapMemory=0 bytes, managedMemory=2.780gb (2985002310 bytes), networkMemory=711.680mb (746250577 bytes)}, numberOfRequiredSlots=3}]. Current slot pool status: Registered TMs: 3, registered slots: 3 free slots: 0
-```
-
-But I've upped the size of the instances, so they have 64Gb ram, 600Gb SSD, 16vCPUs, and have also updated the flink configuration as mentioned above.
-
-At a bit of a loss to identify more. Killed instances after 4th query due to the above.

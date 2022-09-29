@@ -16,11 +16,22 @@
 # limitations under the License.
 ################################################################################
 #execution.target: yarn-per-job
-taskmanager.memory.process.size: 16G
 jobmanager.rpc.address: {{ hostvars['leader']['ansible_default_ipv4']['address'] }}
 jobmanager.rpc.port: 6123
-jobmanager.memory.process.size: 16G
-taskmanager.numberOfTaskSlots: 4
+# The following values are trying to utilize the 64Gb capacity of the
+# m5ad.4xlarge ec2 instances
+jobmanager.memory.process.size: 50g
+jobmanager.memory.heap.size: 20g
+jobmanager.memory.jvm-overhead.max: 30g
+taskmanager.memory.process.size: 50g
+taskmanager.memory.flink.size: 20g
+taskmanager.memory.jvm-overhead.max: 30g
+
+# One task manager runs on each worker, number of task slots is per task manager
+# (ie. threads per worker?).
+# So for a parallelism of 8 and one slot per worker, 8 worker machines are
+# required.
+taskmanager.numberOfTaskSlots: 1
 parallelism.default: 8
 io.tmp.dirs: /tmp
 #==============================================================================
