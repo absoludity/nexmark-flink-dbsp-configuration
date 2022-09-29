@@ -50,8 +50,6 @@ $ ansible -i inventory_flink.ini all -m ping
 }
 ```
 
-If you see "authenticity of host can't be established" errors, first let `ssh` know that you trust the host by ssh-ing to that IP address and trusting the host.
-
 ## Nexmark Flink benchmark
 
 ### Running the playbook to setup the Nexmark-Flink cluster
@@ -74,7 +72,7 @@ ssh -i ~/.ssh/nexmark-bench.pem ubuntu@x.x.x.x
 and run queries with:
 
 ```shell
-./nexmark/bin/run_query.sh q1
+./nexmark/bin/run_query.sh | tee run_query_output.txt
 ```
 
 To run the full set of queries on a remote machine, it is best to use screen or byobu to ensure that if the connection is interrupted you can reconnect.
@@ -296,7 +294,7 @@ leader ansible_host=x.x.x.x ansible_user=ubuntu ansible_ssh_private_key_file=/ho
 
 ## Appendix 2: Setting up local VMs for testing the nexmark setup
 
-To test the Nexmark Flink benchmark locally on an Ubuntu machine, you can [install multipass](https://multipass.run/install) and run 3 Ubuntu VMs configured with your public SSH key, with:
+Although you won't be able to run the Nexmark Flink benchmark locally on a set of Ubuntu VMs, you can test the playbooks locally if you need to update them. To do so, [install multipass](https://multipass.run/install) and run 3 Ubuntu VMs configured with your public SSH key, with:
 
 ```shell
 for VM in nexmark-leader nexmark-worker1 nexmark-worker2
