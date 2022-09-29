@@ -79,7 +79,7 @@ To run the full set of queries on a remote machine, it is best to use screen or 
 
 ### Nexmark Flink Result
 
-The Nexmark Flink benchmark results below are from running with 8 workers using the `m5ad.4xlarge` instance type (64Gb, 16vCPU, 2x300 SSD) configured with more memory than the original test (leading to slightly better performance).
+The Nexmark Flink benchmark results below are from running with 8 workers using the `m5ad.4xlarge` instance type (64Gb, 16vCPU, 2x300 SSD) configured with more memory than the original test (leading to slightly better performance in some cases).
 
 ```shell
 +-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
@@ -113,7 +113,7 @@ The Nexmark Flink benchmark results below are from running with 8 workers using 
 
 Although the `Cores` and `Time(s)` columns appear different from the [original Nexmark results](https://github.com/nexmark/nexmark#benchmark-results), the `Cores * Time(s)` and `Throughput/Cores` columns match much more closely. I am not certain, but the reason appears to be that often a query is finished (CPU drops to near zero) but the Flink job does not finish for a substantial time afterwards.
 
-For example, the `q0` query is slightly faster than the original result, and the end of the query is recognised just as the CPU usage drops:
+For example, the `q0` query is slightly faster than the original result, and the end of the query is recognized just as the CPU usage drops:
 
 ```shell
 Start to run query q0 with workload [tps=10 M, eventsNum=100 M, percentage=bid:46,auction:3,person:1,kafkaServers:null]
@@ -192,9 +192,13 @@ Stop job query q1
 
 See the [complete output for all queries](logs/nexmark-flink-full-output.txt) to compare other queries.
 
+As a comparison, the following chart shows the throughput of the original Nexmark results vs those found on the `m5ad.4xlarge` workers here:
+
+![Comparison of Original Nexmark Flink throughput vs EC2 Nexmark Flink throughput](./charts/Nexmark-Throughput-Flink-Orig-vs-Ec2.png)
+
 ## DBSP Nexmark Benchmark
 
-## Running the playbook to setup the DBSP machine
+### Running the playbook to setup the DBSP machine
 
 Note: This playbook assumes your machines are Ubuntu 20.04 instances.
 
@@ -202,7 +206,7 @@ Note: This playbook assumes your machines are Ubuntu 20.04 instances.
 ansible-playbook -i inventory_dbsp.ini playbook_dbsp.yaml
 ```
 
-## Running the benchmark
+### Running the benchmark
 
 Once the machine is configured, we can build and run the benchmark by ssh'ing into the machine and running:
 
@@ -210,7 +214,7 @@ Once the machine is configured, we can build and run the benchmark by ssh'ing in
 ./dbsp-bench.sh
 ```
 
-## DBSP Result
+### DBSP Result
 
 The Nexmark DBSP benchmark results below are from running the queries on a single worker `m5ad.4xlarge` instance type (64Gb, 16vCPU, 2x300 SSD), configured with 8 workers (passed to [`Runtime::init_circuit()`](https://github.com/vmware/database-stream-processor/blob/dc1f6420cce5fd7de56e99a3655015ef55c80753/src/circuit/dbsp_handle.rs#L9-L30)) to be similar in parallelism to the Nexmark Flink tests.
 
@@ -242,7 +246,15 @@ The Nexmark DBSP benchmark results below are from running the queries on a singl
 └───────┴─────────────┴───────┴──────────┴─────────────────┴──────────────────┴───────────────┴───────────────┴─────────────┴────────────┴────────────────┴─────────────┴─────────────┘
 ```
 
-TODO: Add charts
+## Comparison of DBSP vs Flink for Nexmark benchmark
+
+The comparison charts below compare the DBSP benchmark recorded above with the original Nexmark-Flink results, due to the issue outlined above where the query is complet (CPU goes to zero) before Flink completes the task (see above for chart comparing throughput).
+
+![Nexmark DBSP vs Flink Elapsed time](./charts/Nexmark-DBSP-vs-Flink-Elapsed-Time.png)
+
+![Nexmark DBSP vs Flink Throughput](./charts/Nexmark-DBSP-vs-Flink-Throughput.png)
+
+You can [view and/or copy the sheet with the data and graphs](https://docs.google.com/spreadsheets/d/1CQmbgwgUjNVaCoLQkNMzWEuW_cfYbpiuoq1PE12-b9U/edit?usp=sharing).
 
 ## Appendix 1: Setting up ec2 instances for running benchmarks
 
